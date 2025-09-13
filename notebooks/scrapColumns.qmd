@@ -1,0 +1,154 @@
+  ---
+title: "Scrapping Columns"
+author: "Todos"
+format:
+   html:
+     toc: true
+     html-math-method: katex
+     embed-resources: true
+     self-contained-math: true
+     df-print: kable
+editor: source
+---
+
+```{r}
+library(robotstxt)
+library(rvest)
+library(tidyverse)
+```
+
+El objetivo es extraer los datos que necesitamos para las columnas del dataframe, primeramente con una sola historia.
+Tomando como base la primera historia registrada. 
+
+```{r}
+paths_allowed("https://www.yourghoststories.com/real-ghost-story.php?story=1")
+```
+
+```{r}
+page <- read_html("https://www.yourghoststories.com/real-ghost-story.php?story=1")
+page
+```
+El conjunto de datos final debe contener al menos el título del relato, 
+el lugar, el tipo de evento paranormal y la descripción de la historia.
+
+título: .storytitle
+
+lugar: 
+country: a:nth-child(7)
+state: a:nth-child(9)
+
+tipo: a:nth-child(11)
+
+descripción: 
+
+```{r}
+titles <- page %>%
+  html_node(".storytitle") %>%
+  html_text()
+
+titles
+```
+
+```{r}
+countries <- page %>%
+  html_node("a:nth-child(7)") %>%
+  html_text()
+
+countries
+```
+
+```{r}
+states <- page %>%
+  html_node("a:nth-child(9)") %>%
+  html_text()
+
+states
+```
+
+```{r}
+types <- page %>%
+  html_node("a:nth-child(11)") %>%
+  html_text()
+
+types
+```
+
+```{r}
+descriptions <- page %>%
+  html_node("#story") %>%
+  html_text()
+
+descriptions
+```
+
+```{r}
+data_pages <- tibble(
+  title=titles,
+  countrie=countries,
+  state=states,
+  type=types,
+  description=descriptions
+)
+
+data_pages
+```
+
+```{r}
+glimpse(data_pages)
+```
+
+```{r}
+data_pages <- data_pages %>%
+  mutate(id=1:nrow(data_pages)) %>%
+  relocate(id)
+
+data_pages
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
