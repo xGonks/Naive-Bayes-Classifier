@@ -25,7 +25,7 @@ paths_allowed("https://www.yourghoststories.com/real-ghost-story.php?story=1")
 ```
 
 ```{r}
-page <- read_html("https://www.yourghoststories.com/real-ghost-story.php?story=1")
+page <- read_html("https://www.yourghoststories.com/real-ghost-story.php?story=2")
 page
 ```
 El conjunto de datos final debe contener al menos el título del relato, 
@@ -40,6 +40,14 @@ state: a:nth-child(9)
 tipo: a:nth-child(11)
 
 descripción: 
+
+```{r}
+countries <- page %>%
+  html_nodes("a") %>%
+  html_text()
+
+countries
+```
 
 ```{r}
 titles <- page %>%

@@ -35,18 +35,110 @@ titulo
 ```
 
 ```{r}
+titles <- character()
+
 for (x in 1:10) {
   url = sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
   
   if (status_code(GET(url)) == 200) {
-    page = read_html(url)
-    titulo = page %>%
-      html_nodes(".storytitle") %>%
+    page <- read_html(url)
+    
+    title = page %>%
+      html_node(".storytitle") %>%
       html_text()
-    cadena_formateada = sprintf("%d: %s", x, titulo)
-    print(cadena_formateada)
-  } else {
-    print(sprintf("%d: ERROR", x))
+    titles <- c(titles, title)
+    
+    countrie = page %>%
+      html_node("a:nth-child(7)") %>%
+      html_text()
+    countries <- c(countries, countrie)
+    
+    state = page %>%
+      html_node("a:nth-child(9)") %>%
+      html_text()
+    states <- c(states, state)
+    
+    type = page %>%
+      html_node("a:nth-child(11)") %>%
+      html_text()
+    types <- c(types, type)
+    
+    description = page %>%
+      html_node("#story") %>%
+      html_text()
+    descriptions <- c(descriptions, description)
   }
 }
+
+data_pages <- tibble(
+  title=titles,
+  countrie=countries,
+  state=states,
+  type=types,
+  description=descriptions
+)
+data_pages
 ```
+
+```{r}
+titles <- character()
+
+for (x in 1:10) {
+  url = sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
+  
+  if (status_code(GET(url)) == 200) {
+    page <- read_html(url)
+    
+    title = page %>%
+      html_node(".storytitle") %>%
+      html_text()
+    titles <- c(titles, title)
+    
+    countrie = page %>%
+      html_node("a:nth-child(7)") %>%
+      html_text()
+    countries <- c(countries, countrie)
+  }
+}
+
+data_pages <- tibble(
+  title=titles,
+  countrie=countries
+)
+data_pages
+```
+
+```{r}
+titles
+```
+
+```{r}
+countries
+```
+
+```{r}
+titles <- character()
+
+for (x in 1:10) {
+  url = sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
+  
+  if (status_code(GET(url)) == 200) {
+    page <- read_html(url)
+    countrie = page %>%
+      html_node("a:nth-child(7)") %>%
+      html_text()
+    countries <- c(countries, countrie)
+  }
+}
+countries
+data_pages <- tibble(
+  countrie=countries
+)
+data_pages
+```
+
+```{r}
+countries
+```
+
+
