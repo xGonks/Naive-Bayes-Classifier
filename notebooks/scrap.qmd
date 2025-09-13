@@ -1,0 +1,26 @@
+---
+title: "scrap"
+author: "Todos"
+format:
+   html:
+     toc: true
+     html-math-method: katex
+     embed-resources: true
+     self-contained-math: true
+     df-print: kable
+editor: visual
+---
+
+```{r}
+library(robotstxt)
+library(rvest)
+```
+
+```{r}
+paths_allowed("https://www.yourghoststories.com/")
+```
+
+```{r}
+page <- read_html("https://www.yourghoststories.com")
+page
+```
