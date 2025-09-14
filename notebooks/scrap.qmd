@@ -88,7 +88,7 @@ detectar_valor <- function(texto, lista) {
 ```
 
 ```{r}
-plan(multisession, workers = 4)
+plan(multisession, workers = 6)
 
 get_story <- function(x, paises, estados, categorias) {
   url <- sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
@@ -126,7 +126,7 @@ get_story <- function(x, paises, estados, categorias) {
   }, error = function(e) NULL)
 }
 
-results <- future_map(1:20124, ~ get_story(.x, paises, estados, categorias), .progress = TRUE)
+results <- future_map(1:28600, ~ get_story(.x, paises, estados, categorias), .progress = TRUE)
 
 data_pages <- bind_rows(results)
 
@@ -159,5 +159,5 @@ data_pages_loaded
 ```
 
 ```{r}
-
+parallel::detectCores()
 ```
