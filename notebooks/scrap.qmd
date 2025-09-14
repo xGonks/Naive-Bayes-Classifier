@@ -17,6 +17,8 @@ library(rvest)
 library(httr)
 library(tibble)
 library(stringr)
+library(furrr)
+library(dplyr)
 ```
 
 ```{r}
@@ -86,61 +88,47 @@ detectar_valor <- function(texto, lista) {
 ```
 
 ```{r}
-titles <- character()
-countries <- character()
-states <- character()
-types <- character()
-descriptions <- character()
+plan(multisession, workers = 4)
 
-for (x in 1:10) {
-  url = sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
+get_story <- function(x, paises, estados, categorias) {
+  url <- sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
   
-  if (status_code(GET(url)) == 200) {
-    page <- read_html(url)
+  tryCatch({
+    resp <- GET(url)
+    if (status_code(resp) != 200) return(NULL)
+    
+    page <- read_html(resp)
     
     title <- page %>%
       html_node(".storytitle") %>%
       html_text(trim = TRUE)
-    titles <- c(titles, title)
     
     description <- page %>%
       html_node("#story") %>%
       html_text(trim = TRUE)
-    descriptions <- c(descriptions, description)
     
     info_extra <- page %>%
       html_nodes(".storyinfo a") %>%
       html_text(trim = TRUE)
     
-    country <- NA
-    state <- NA
-    category <- NA
+    country <- intersect(info_extra, paises)[1] %||% NA
+    state   <- intersect(info_extra, estados)[1] %||% NA
+    category<- intersect(info_extra, categorias)[1] %||% NA
     
-    for (info in info_extra) {
-      if (info %in% paises) {
-        country <- info
-      } else if (info %in% estados) {
-        state <- info
-      } else if (info %in% categorias) {
-        category <- info
-      }
-    }
-    
-    countries <- c(countries, country)
-    states <- c(states, state)
-    types <- c(types, category)
-  }
+    list(
+      id = x,
+      title = title,
+      country = country,
+      state = state,
+      category = category,
+      description = gsub("\n", " ", description)
+    )
+  }, error = function(e) NULL)
 }
 
-data_pages <- tibble(
-  title = titles,
-  country = countries,
-  state = states,
-  category = types,
-  description = descriptions
-)
+results <- future_map(1:20124, ~ get_story(.x, paises, estados, categorias), .progress = TRUE)
 
-data_pages$description <- gsub("\n", " ", data_pages$description)
+data_pages <- bind_rows(results)
 
 data_pages
 ```
