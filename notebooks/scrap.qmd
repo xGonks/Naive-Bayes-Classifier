@@ -15,6 +15,8 @@ editor: visual
 library(robotstxt)
 library(rvest)
 library(httr)
+library(tibble)
+library(stringr)
 ```
 
 ```{r}
@@ -23,19 +25,72 @@ paths_allowed("https://www.yourghoststories.com/")
 
 ```{r}
 page = read_html("https://www.yourghoststories.com/real-ghost-story.php?story=1")
-page
-```
 
-```{r}
-titulo = page %>%
-  html_nodes(".storytitle") %>%
+prueba = page %>%
+  html_nodes(".storyinfo a") %>% # .storyinfo a # #story # #story p
   html_text()
 
-titulo
+prueba
+```
+
+```{r}
+page = read_html("https://www.yourghoststories.com/real-ghost-stories.php")
+
+categorias = page %>%
+  html_nodes(".two_column_layout_col") %>%
+  html_text() %>%
+  str_split("\n") %>%
+  unlist() %>%
+  str_trim() %>%
+  .[. != ""] %>%
+  str_remove("\\s*\\(\\d+\\)$")
+
+categorias
+```
+
+```{r}
+paises = page %>%
+  html_nodes(".column_layout:nth-child(53) .three_column_layout_col") %>%
+  html_text() %>%
+  str_split("\n") %>%
+  unlist() %>%
+  str_trim() %>%
+  .[. != ""] %>%
+  str_remove("\\s*\\(\\d+\\)$")
+
+paises
+```
+
+```{r}
+estados = page %>%
+  html_nodes(".column_layout:nth-child(55) .three_column_layout_col") %>%
+  html_text() %>%
+  str_split("\n") %>%
+  unlist() %>%
+  str_trim() %>%
+  .[. != ""] %>%
+  str_remove("\\s*\\(\\d+\\)$")
+
+estados
+```
+
+```{r}
+detectar_valor <- function(texto, lista) {
+  encontrado <- lista[str_detect(texto, fixed(lista, ignore_case = TRUE))]
+  if (length(encontrado) > 0) {
+    return(encontrado[1])
+  } else {
+    return(NA_character_)
+  }
+}
 ```
 
 ```{r}
 titles <- character()
+countries <- character()
+states <- character()
+types <- character()
+descriptions <- character()
 
 for (x in 1:10) {
   url = sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
@@ -43,102 +98,78 @@ for (x in 1:10) {
   if (status_code(GET(url)) == 200) {
     page <- read_html(url)
     
-    title = page %>%
+    title <- page %>%
       html_node(".storytitle") %>%
-      html_text()
+      html_text(trim = TRUE)
     titles <- c(titles, title)
     
-    countrie = page %>%
-      html_node("a:nth-child(7)") %>%
-      html_text()
-    countries <- c(countries, countrie)
-    
-    state = page %>%
-      html_node("a:nth-child(9)") %>%
-      html_text()
-    states <- c(states, state)
-    
-    type = page %>%
-      html_node("a:nth-child(11)") %>%
-      html_text()
-    types <- c(types, type)
-    
-    description = page %>%
+    description <- page %>%
       html_node("#story") %>%
-      html_text()
+      html_text(trim = TRUE)
     descriptions <- c(descriptions, description)
-  }
-}
-
-data_pages <- tibble(
-  title=titles,
-  countrie=countries,
-  state=states,
-  type=types,
-  description=descriptions
-)
-data_pages
-```
-
-```{r}
-titles <- character()
-
-for (x in 1:10) {
-  url = sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
-  
-  if (status_code(GET(url)) == 200) {
-    page <- read_html(url)
     
-    title = page %>%
-      html_node(".storytitle") %>%
-      html_text()
-    titles <- c(titles, title)
+    info_extra <- page %>%
+      html_nodes(".storyinfo a") %>%
+      html_text(trim = TRUE)
     
-    countrie = page %>%
-      html_node("a:nth-child(7)") %>%
-      html_text()
-    countries <- c(countries, countrie)
+    country <- NA
+    state <- NA
+    category <- NA
+    
+    for (info in info_extra) {
+      if (info %in% paises) {
+        country <- info
+      } else if (info %in% estados) {
+        state <- info
+      } else if (info %in% categorias) {
+        category <- info
+      }
+    }
+    
+    countries <- c(countries, country)
+    states <- c(states, state)
+    types <- c(types, category)
   }
 }
 
 data_pages <- tibble(
-  title=titles,
-  countrie=countries
+  title = titles,
+  country = countries,
+  state = states,
+  category = types,
+  description = descriptions
 )
+
+data_pages$description <- gsub("\n", " ", data_pages$description)
+
 data_pages
 ```
 
 ```{r}
-titles
-```
-
-```{r}
-countries
-```
-
-```{r}
-titles <- character()
-
-for (x in 1:10) {
-  url = sprintf("https://www.yourghoststories.com/real-ghost-story.php?story=%d", x)
-  
-  if (status_code(GET(url)) == 200) {
-    page <- read_html(url)
-    countrie = page %>%
-      html_node("a:nth-child(7)") %>%
-      html_text()
-    countries <- c(countries, countrie)
-  }
-}
-countries
-data_pages <- tibble(
-  countrie=countries
+write.table(
+  data_pages,
+  file = "../data/data_pages.csv",
+  sep = "#$%#$%",
+  row.names = FALSE,
+  col.names = TRUE,
+  quote = TRUE,
+  fileEncoding = "UTF-8"
 )
-data_pages
 ```
 
 ```{r}
-countries
+lines <- readLines("../data/data_pages.csv", encoding = "UTF-8")
+split_lines <- strsplit(lines, "#\\$%#\\$%")
+
+data_pages_loaded <- as.data.frame(do.call(rbind, split_lines), stringsAsFactors = FALSE)
+
+colnames(data_pages_loaded) <- data_pages_loaded[1, ]
+data_pages_loaded <- data_pages_loaded[-1, ]
+rownames(data_pages_loaded) <- NULL
+
+data_pages_loaded
 ```
 
+```{r}
 
+```
