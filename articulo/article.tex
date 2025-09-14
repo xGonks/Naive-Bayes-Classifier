@@ -11,7 +11,7 @@
 
 \patchcmd{\thebibliography}{\section*{\refname}}{}{}{}
 
-\title{title}
+\title{Naive Bayes classifier for paranormal stories}
 
 \author{
 Alan Fernando Bravo Pimentel \and
@@ -32,12 +32,17 @@ abstact
 \end{abstract}
 
 \section{Introduction}
-intro
+Throughout human history, paranormal narratives have captured the imagination of individuals all over the world. Stories of supernatural phenomena, haunted places, and spiritual encounters have been commonplace elements of folklore and constitute a form of cultural data. For this reason, several websites and platforms have emerged with the mission of storing and showcasing this wide variety in the digital era. Among these, the platform \textit{Your Ghost Stories} offers thousands of individual accounts of paranormal experiences submitted by users. Undeniably, these stories provide a highly interesting and rich framework for applying computational tools to explore, analyze, and structure information in the form of text.
+The primary goal of this study is to train and implement a naive Bayes classifier capable of categorizing paranormal stories according to the type of phenomenon described. In order to accomplish this, we built a dataset by performing web scraping on the website \textit{Your Ghost Stories}. Afterward, some techniques of natural language processing were employed, such as tokenization, and a sparse matrix prepared the data for further analysis. 
+A naive Bayes classifier was then appiled to this dataset, taking advantage of its effectiveness for text classification applications. By modeling the distribution of words from different categories of these stories, the classifier can predict the type of event described in each story. The performance of this classifier was later evaluated through several metrics. \\
+This study demonstrates the capabilities of NLP techniques coupled with probabilistic modeling in text to explore the way that paranormal stories are shared and categorized.
 
 
 \section{Methodology}
-methodolodgy
-
+In order to acquire the data for the classifier, we employed web scraping to extract narratives from the \textit{Your Ghost Stories} platform. The first step was to verify scraping permission using the paths\_allowed() function from the robotstxt library in R. Then, the script used identified the relevant elements to capture such as the title of each story, its description as well as metadata such as country, state, and category. Additionally, a custom function called get\_story() was implemented so as to automate the process and extract multiple stories in parallel, which increased efficiency. The resulting dataset was structured into an organized table containing fields for id, title, country, state, category and description. Finally, the data were exported to a CSV file which contained up to 28,600 different observations/stories. \\
+The text's preparation for analysis came next. 
+Each story was tokenized in turn, allowing the narrative descriptions to be broken down into discrete words. Then, the most common stop words were eliminated and Only the most instructive terms remained in the text. A frequency count of the words that appeared in each document was then produced, offering a systematic method of  expressing the narratives numerically. These word counts were then transformed into a sparse matrix, where each row corresponded to a story and each column represented a unique word (feature). The entries of the matrix indicated the frequency of each word inside a particular story. 
+Finally, the categories associated with each story were aligned with the rows of the newly created sparse matrix, so that we could create a dataset in which we could represent the information quantitatively and keep it linked to its respective class label.
 
 
 \section{Application}
