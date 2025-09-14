@@ -1,0 +1,261 @@
+---
+title: "Modeling"
+author: "Camila"
+format:
+   html:
+     toc: true
+     html-math-method: katex
+     embed-resources: true
+     self-contained-math: true
+     df-print: kable
+editor: source
+---
+
+# Abrir datos
+
+```{r}
+stories = read_delim("sparce.scv", delim = ";")
+head(stories)
+```
+
+![]()
+
+# Limpiar datos
+
+```{r}
+glimpse(stories)
+```
+
+```{r}
+data = data |> #checar
+        filter(!is.na(select(category)))
+```
+
+# Dividir matriz
+
+```{r}
+library(tidymodels)
+```
+
+```{r}
+story_split= initial_split(data, prop = 0.7)
+```
+
+```{r}
+story_train = training(story_split)
+story_test = testing(story_split)
+```
+
+```{r}
+install.packages("e1071")
+```
+
+```{r}
+library(e1071)
+```
+
+```{r}
+NB_cl1 = naiveBayes(category ~ . , data = diabetes_train)
+```
+
+```{r}
+y_pred1 = predict(NB_cl1, newdata = story_test)
+```
+
+## Matriz confusión
+
+```{r}
+confusionMatrix(y_pred1, story_test[["category"]])
+```
+
+```{r}
+cm = table(story_test$category, y_pred1)
+```
+
+```{r}
+sum(diag(cm))/ sum(cm)
+```
+
+# Naive bayes método 2
+
+```{r}
+install.packages("naivebayes")
+```
+
+```{r}
+library(naivebayes)
+```
+
+```{r}
+NB_cl2 = naivebayes(category ~ . , data = story_train)
+
+```
+
+```{r}
+y_pred2 = predict(NB_cl2, story_test)
+```
+
+## Cofusion Matrix
+
+```{r}
+confusionMatrix(y_pred2, story_test[["category"]])
+```
+
+# Simplificar categorías
+
+REHACER SPLIT!!
+```{r}
+data <- stories |>
+  mutate(
+    binary_cat = case_when(
+      category == "Haunted Places" ~ "Haunted Places",
+      TRUE ~ "Other"   # default for all other cases
+    )
+  )
+```
+
+## Clasificación
+
+```{r}
+NB_cl3 = naiveBayes(binary_cat ~ . , data = diabetes_train)
+```
+
+```{r}
+y_pred3 = predict(NB_cl3, newdata = story_test)
+```
+
+```{r}
+confusionMatrix(y_pred3, story_test[["binary_cat"]])
+```
+
+
+```{r}
+NB_cl4 = naivebayes(binary_cat ~ . , data = story_train)
+
+```
+
+```{r}
+y_pred4 = predict(NB_cl4, story_test)
+```
+
+```{r}
+confusionMatrix(y_pred4, story_test[["binary_cat"]])
+```
+
+# Distribución Poisson
+```{r}
+NB_pois = naive_bayes(binary_cat ~ ., train, usepoisson = TRUE)
+```
+
+```{r}
+y_predP = predict(NB_pois, story_test)
+```
+
+```{r}
+confusionMatrix(y_predP, story_test[["binary_cat"]])
+```
+
+# Laplace smoothening
+
+```{r}
+NB_poisLAP = naive_bayes(binary_cat ~ ., train, usepoisson = TRUE, laplace = 1)
+```
+
+```{r}
+y_predPLAP = predict(NB_poisLAP, story_test)
+```
+
+```{r}
+confusionMatrix(y_predPLAP, story_test[["binary_cat"]])
+```
+
+
+# Selección de hiperparámetros
+```{r}
+library(caret)
+```
+
+```{r}
+X_df = story_train |> select(-binary_cat)
+y   = story_train$binary_cat
+```
+
+```{r}
+laplace_vals = seq(0.1, 5, by = 0.5)
+```
+
+```{r}
+outer_folds = createFolds(y, k = 5, returnTrain = FALSE)
+inner_folds = 5
+```
+
+```{r}
+cv_y_test = c()
+cv_y_pred = c()
+```
+
+
+```{r}
+
+for (outer in outer_folds) {
+  X_train_outer = X_df[-outer, ]
+  y_train_outer = y[-outer]
+  X_test_outer  = X_df[outer, ]
+  y_test_outer  = y[outer]
+  
+  # Inner loop: elegir mejor Laplace
+  best_alpha = NULL
+  best_acc = 0
+  
+  inner_idx = createFolds(y_train_outer, k = inner_folds, returnTrain = FALSE)
+  
+  for (lap in laplace_vals) {
+    acc_inner = c()
+    for (fold in inner_idx) {
+      X_sub_train = X_train_outer[-fold, ]
+      y_sub_train = y_train_outer[-fold]
+      X_val       = X_train_outer[fold, ]
+      y_val       = y_train_outer[fold]
+      
+      model_inner = naive_bayes(x = X_sub_train, y = y_sub_train,
+                                 laplace = lap, usepoisson = TRUE)
+      pred_val = predict(model_inner, X_val)
+      acc_inner = c(acc_inner, mean(pred_val == y_val))
+    }
+    
+    avg_acc = mean(acc_inner)
+    if (avg_acc > best_acc) {
+      best_acc = avg_acc
+      best_alpha = lap
+    }
+  }
+```
+
+```{r}
+ 
+  cat("***************\n")
+  cat("Best laplace:", best_alpha, 
+      " Best Acc (validation):", round(best_acc, 4), "\n")
+  
+```
+
+```{r}
+# Train final model con el mejor laplace encontrado
+  final_model = naive_bayes(x = X_train_outer, y = y_train_outer,
+                             laplace = best_alpha, usepoisson = TRUE)
+  pred_outer = predict(final_model, X_test_outer)
+  
+  acc_test = mean(pred_outer == y_test_outer)
+  cat("Acc (test):", round(acc_test, 4), "\n")
+  
+  cv_y_test = c(cv_y_test, as.character(y_test_outer))
+  cv_y_pred = c(cv_y_pred, as.character(pred_outer))
+}
+```
+
+```{r}
+cm = confusionMatrix(factor(cv_y_pred, levels = levels(y)),
+                      factor(cv_y_test, levels = levels(y)))
+print(cm)
+```
+
