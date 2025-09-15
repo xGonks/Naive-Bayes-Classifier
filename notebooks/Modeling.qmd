@@ -11,104 +11,76 @@ format:
 editor: source
 ---
 
-# Sparce Matrix Process
-
 ```{r}
 library(tidyverse)
 library(tidytext)
 library(Matrix)
-```
 
-```{r}
-df = read_delim("../data/data_pages.csv", delim = "#$%#$%", trim_ws = TRUE)
 
-```
+df = read_delim(
+  "../data/data_pages.csv",
+  delim = "#$%#$%",
+  trim_ws = TRUE
+)
 
-```{r}
+
 df = df %>%
-  filter(!is.na(title), !is.na(description)) #quitar observaciones nan
-```
+  filter(!is.na(title), !is.na(description)) %>%
+  mutate(doc_id = paste0(row_number(), "_", title))  
 
-Agregamos una columna de identificador de la historia
-
-```{r}
-df = df %>%
-  mutate(doc_id = paste0(row_number(), "_", title))
-```
-
-Vemos los nombres de las columnas
-
-```{r}
-colnames(df)
 ```
 
 ```{r}
+
 tokens = df %>%
-  select(doc_id, category, description) %>%  #Elegimos las variables de doc_id , category y description
-  unnest_tokens(word, description) #Las palabras de decription se separan individualmente
-```
-
-Quitar posibles muletillas o nexos
-```{r}
-tokens <- tokens %>%
-  filter(nchar(word) >= 3)
-```
+  select(doc_id, category, description) %>%
+  unnest_tokens(word, description)
 
 
-```{r}
-data("stop_words")
+data("stop_words")  
+
+
 tokens = tokens %>%
-  anti_join(stop_words, by = "word") #Elimina las palabras de tokens comparando la columna word
+  anti_join(stop_words, by = "word")
+
 ```
-
-
-Quitar palabras que casi no aparecen
-```{r}
-word_freq <- tokens %>%
-  count(word, sort = TRUE)
-
-tokens <- tokens %>%
-  semi_join(filter(word_freq, n >= 5), by = "word") 
-```
-
-filtrar con palabras más frecuentes
-```{r}
-top_words <- word_freq %>%
-  slice_head(n = 2000) %>%        # pick top 20000 words
-  pull(word)
-```
-
 
 ```{r}
 contar_palabras = tokens %>%
-  count( category, doc_id, word, sort = TRUE) #Contamos cuantas veces sale cada palabra y ordenamos de mayor a menor
+  count(doc_id, word, sort = TRUE)
+
 ```
 
 ```{r}
-sparse_matrix = contar_palabras %>% #El conteo de las palabras se convierte en matriz
-  tuits_df %>%
-  unnest_tokens(input = "text", output = "palabra") %>%
-  count(screen_name, status_id, palabra) %>%
-  spread(key = palabra, value = n)
+sparse_matrix = contar_palabras %>%
+  cast_sparse(doc_id, word, n)
 
-sparse_matrix$category <- sparse_matrix$category[match(rownames(sparse_matrix), df$doc_id)]
+
+top_words = colSums(sparse_matrix) %>% sort(decreasing = TRUE) %>% head(3000) %>% names()
+sparse_matrix = sparse_matrix[, top_words]
+
+
+dim(sparse_matrix)
+sparse_matrix[1:5, 1:5]
+
 ```
 
 ```{r}
-categories = df %>%
-  distinct(doc_id, category) %>% #Se eligen las categorias
-  arrange(match(doc_id, rownames(sparse_matrix))) %>% #Hacemos que coincidan con las filas de la matriz
-  pull(category)
 
-head(categories)
+df_matrix = as.data.frame(as.matrix(sparse_matrix))
+
+
 ```
 
 ```{r}
-sparse_matrix
+
+df_matrix$category = categories
 ```
 
+
 ```{r}
-categories
+df_matrix = df_matrix %>%
+  filter(!is.na(category))
 ```
 
 # Modelado
