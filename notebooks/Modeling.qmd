@@ -93,7 +93,7 @@ Ultimas columnas de la matriz para serciorarnos que si se agregó categoría
 
 ```{r}
 
-df_matrix [, (ncol(df_matrix )-4):ncol(df_matrix )]
+df_matrix[1:10, (ncol(df_matrix)-4):ncol(df_matrix)]
        
 ```
 
@@ -181,22 +181,21 @@ cm
 cm$overall["Accuracy"]
 
 ```
-
+Para resumir esta información se creó una función para sacar los estadísticos globales
 ```{r}
-get_caret_report = function(cm) {
+#ChatGPT (GPT-5 Mini). (2025). R function get_caret_report for summarizing confusion matrix metrics [Computer software]. OpenAI.
+get_caret_report = function(cm) { 
   accuracy = unname(cm$overall["Accuracy"])
   byclass  = cm$byClass
 
-  # Normalize byClass into a data.frame with one row per class
+  # dataframe
   if (is.matrix(byclass)) {
     per_class_df = as.data.frame(byclass)
   } else {
     per_class_df = as.data.frame(t(byclass), stringsAsFactors = FALSE)
-    # set rowname to positive label if available
     if (!is.null(cm$positive)) rownames(per_class_df) = cm$positive
   }
 
-  # robustly find column names for precision/recall/f1 (different caret versions)
   cols = colnames(per_class_df)
   find_col = function(patterns) {
     idx = grep(paste(patterns, collapse = "|"), cols, ignore.case = TRUE)
@@ -206,13 +205,12 @@ get_caret_report = function(cm) {
   rec_col  = find_col(c("recall", "sensitivity"))
   f1_col   = find_col("f1")
 
-  # get confusion table and compute per-class TP/pred/actual (rows = prediction, cols = reference)
   tab = as.matrix(cm$table)
   tp = diag(tab)
-  pred_pos = rowSums(tab)  # predicted positives (rows)
-  act_pos  = colSums(tab)  # actual positives (cols)
+  pred_pos = rowSums(tab)  # PP
+  act_pos  = colSums(tab)  #AP
 
-  # Per-class precision/recall/f1 (use caret values if present, otherwise compute)
+  # Per-class precision/recall/f1
   precision_i = if (!is.na(prec_col)) per_class_df[[prec_col]] else tp / pred_pos
   recall_i    = if (!is.na(rec_col))  per_class_df[[rec_col]]  else tp / act_pos
   f1_i        = if (!is.na(f1_col))   per_class_df[[f1_col]]   else
@@ -258,7 +256,7 @@ get_caret_report = function(cm) {
 ```{r}
 res = get_caret_report(cm)
 res$summary       # macro/micro + accuracy
-res$per_class     # precision/recall/F1/support per class
+res$per_class     # precision/recall/F1/support por clase
 
 ```
 
@@ -304,7 +302,6 @@ setdiff(names(story_train), names(story_test))
 setdiff(names(story_test), names(story_train))
 
 ```
-
 
 ### Confusion Matrix
 
@@ -387,13 +384,12 @@ table(y_pred3)
 ```
 
 ```{r}
-y_pred3
+#y_pred3
 ```
 
 ```{r}
 y_trainBIN = factor(storybin_train[["binary_cat"]])
 ```
-
 
 ### Clasificación 2
 
@@ -464,97 +460,74 @@ dividir target y predictors
 > Éste código es una adaptación de un proyecto con el Profesor Omar
 
 ```{r}
-X_df = storybin_train |> dplyr::select(-binary_cat)
-y    = storybin_train$binary_cat
-```
-
-```{r}
+# Rango de lambda a evaluar
 laplace_vals = seq(0.1, 5, by = 0.5)
 set.seed(456)
 ```
 
 ```{r}
-outer_folds = createFolds(y, k = 5, returnTrain = FALSE)
-inner_folds = 5
+acc = c()
+folds = createFolds(storybin_train$binary_cat, k = 5, returnTrain = FALSE)
+
 ```
 
 ```{r}
-cv_y_test = c()
-cv_y_pred = c()
-ultimate_laplace = c()
-```
-
-```{r}
-for (outer in outer_folds) {
-  X_train_outer = X_df[-outer, ]
-  y_train_outer = y[-outer]
-  X_test_outer  = X_df[outer, ]
-  y_test_outer  = y[outer]
+for (lap in laplace_vals) {
+  acc_cv = c()
   
-  # Inner loop → pick best Laplace (by Recall)
-  best_alpha = NULL
-  best_recall = -Inf
-  
-  inner_idx = createFolds(y_train_outer, k = inner_folds, returnTrain = FALSE)
-  
-  for (lap in laplace_vals) {
-    recalls_inner = c()
+  for (fold in folds) {
+    train_data = storybin_train[-fold, ]
+    test_data  = storybin_train[fold, ]
     
-    for (fold in inner_idx) {
-      X_sub_train = X_train_outer[-fold, ]
-      y_sub_train = y_train_outer[-fold]
-      X_val       = X_train_outer[fold, ]
-      y_val       = y_train_outer[fold]
-      
-      model_inner = naive_bayes(x = X_sub_train, y = y_sub_train,
-                                laplace = lap, usepoisson = TRUE)
-      pred_val = predict(model_inner, X_val)
-      
-      cm_val = confusionMatrix(pred_val, y_val, positive = "Haunted Places")
-      recalls_inner = c(recalls_inner, cm_val$byClass["Recall"])
-    }
+    # Modelo con  bayes
+    model_nb = naive_bayes(binary_cat ~ ., data = train_data,
+                           usepoisson = TRUE, laplace = lap)
     
-    avg_recall = mean(recalls_inner, na.rm = TRUE)
+    y_pred = predict(model_nb, test_data %>% select(-binary_cat))
+    y_true = test_data$binary_cat
     
-    if (avg_recall > best_recall) {
-      best_recall = avg_recall
-      best_alpha  = lap
-    }
+    acc_cv = c(acc_cv, mean(y_pred == y_true))
   }
   
-  # Save chosen laplace for this outer fold
-  chosen_laplace = c(chosen_laplace, best_alpha)
-  
-  # Train outer model with best Laplace
-  final_model = naive_bayes(x = X_train_outer, y = y_train_outer,
-                            laplace = best_alpha, usepoisson = TRUE)
-  pred_outer = predict(final_model, X_test_outer)
-  
-  cv_y_test  = c(cv_y_test, y_test_outer)
-  cv_y_pred  = c(cv_y_pred, pred_outer)
+  acc = c(acc, mean(acc_cv))
 }
 ```
 
-
 ```{r}
-cm_nested = confusionMatrix(factor(cv_y_pred, levels = levels(y_trueBIN)),
-                            factor(cv_y_test, levels = levels(y_trueBIN)),
-                            mode = "everything",
-                            positive = "Haunted Places")
-cm_nested
+# Mejor Laplace
+opt_index = which.max(acc)
+opt_hyperparameter = laplace_vals[opt_index]
+
+cat("Laplace óptimo:", opt_hyperparameter, "\n")
 ```
 
 ```{r}
-cat("Laplace chosen per outer fold:\n")
-print(chosen_laplace)
-cat("Most frequent/best Laplace overall:", 
-    names(sort(table(chosen_laplace), decreasing = TRUE))[1], "\n")
+# Gráfica
+plot(laplace_vals, acc, type = "b", pch = 19,
+     xlab = "Laplace", ylab = "Accuracy",
+     main = "Validación cruzada para Naive Bayes")
+abline(v = opt_hyperparameter, col = "red", lty = 2)
+```
+### Usar mejor hyperparámetro
+
+```{r}
+NB_poisLAPBEST = naive_bayes(binary_cat ~ ., storybin_train, usepoisson = TRUE, laplace = 1)
+```
+
+```{r}
+y_predPLAPBEST = predict(NB_poisLAPBEST, storybin_test)
+```
+
+### Confusion Matrix
+
+```{r}
+cmPLAPBEST = confusionMatrix(y_predPLAPBEST, y_trueBIN, mode = "everything")
+cmPLAPBEST
 ```
 
 ## Resumen
 
 ```{r}
-# Collect summaries from all models
 results_list = list(
   "NaiveBayes_e1071"        = cm,
   "NaiveBayes_naivebayes"   = cm2,
@@ -562,19 +535,15 @@ results_list = list(
   "Binary_naivebayes"       = cm4,
   "Binary_Poisson"          = cmP,
   "Binary_Poisson_Laplace"  = cmPLAP,
-  "Binary_BestLaplace"      = cm_nested
-  # add "Binary_NestedCV" = cm_nested if you also want nested CV result
+  "Binary_BestLaplace"      = cmPLAPBEST
 )
 
-# Apply your report function to each confusion matrix
 summary_all = purrr::map_dfr(
   results_list,
   ~ get_caret_report(.x)$summary,
   .id = "Model"
 )
 
-# Print combined table
 summary_all
 
 ```
-
