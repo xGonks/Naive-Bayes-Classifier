@@ -66,6 +66,13 @@ df_matrix = as.data.frame(as.matrix(sparse_matrix))
 ```
 
 ```{r}
+categories <- df %>%
+  distinct(doc_id, category) %>%
+  arrange(match(doc_id, rownames(sparse_matrix))) %>%
+  pull(category)
+```
+
+```{r}
 
 df_matrix$category = categories
 ```
