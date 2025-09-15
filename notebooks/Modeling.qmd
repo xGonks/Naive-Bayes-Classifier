@@ -69,8 +69,15 @@ sparse_matrix[1:5, 1:5]
 
 df_matrix = as.data.frame(as.matrix(sparse_matrix))
 
-
 ```
+
+```{r}
+categories <- df %>%
+  distinct(doc_id, category) %>%
+  arrange(match(doc_id, rownames(sparse_matrix))) %>%
+  pull(category)
+```
+
 
 ```{r}
 
@@ -78,45 +85,34 @@ df_matrix$category = categories
 ```
 
 
-```{r}
-df_matrix = df_matrix %>%
-  filter(!is.na(category))
-```
-
 # Modelado
 
 ## Extraer datos
 
-Vamos a hacer una visualización más intuitiva solo para comprender cómo trabajaremos la matriz
 
+Ultimas columnas de la matriz para serciorarnos que si se agregó categoría
 ```{r}
-library(tibble)
 
-p <- ncol(sparse_matrix)
-df_preview <- as_tibble(
-  as.matrix(sparse_matrix[1:10, c(1:5, (p-4):p)]), #ver comienzo y final de la matriz
-  rownames = "doc_id"
-)
-
-df_preview
+df_matrix [, (ncol(df_matrix )-4):ncol(df_matrix )]
+       
 ```
 
-No se unirá categoría para evitar una matriz densa y evitar pasar el límite de memoria de R.
 
-```{r}
-stories <- sparse_matrix    
-target <- categories 
 ```
 
 # Limpiar datos
 
 ```{r}
-glimpse(stories)
+stories = df_matrix
+head(stories)
 ```
 
+
 ```{r}
-glimpse(target)
+stories = stories %>%
+  filter(!is.na(category))
 ```
+
 
 ```{r}
 #data = data |> checar
