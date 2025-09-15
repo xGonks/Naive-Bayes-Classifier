@@ -11,14 +11,130 @@ format:
 editor: source
 ---
 
-# Abrir datos
+# Sparce Matrix Process
 
 ```{r}
-stories = read_delim("sparce.scv", delim = ";")
-head(stories)
+library(tidyverse)
+library(tidytext)
+library(Matrix)
 ```
 
-![]()
+```{r}
+df = read_delim("../data/data_pages.csv", delim = "#$%#$%", trim_ws = TRUE)
+
+```
+
+```{r}
+df = df %>%
+  filter(!is.na(title), !is.na(description)) #quitar observaciones nan
+```
+
+Agregamos una columna de identificador de la historia
+
+```{r}
+df = df %>%
+  mutate(doc_id = paste0(row_number(), "_", title))
+```
+
+Vemos los nombres de las columnas
+
+```{r}
+colnames(df)
+```
+
+```{r}
+tokens = df %>%
+  select(doc_id, category, description) %>%  #Elegimos las variables de doc_id , category y description
+  unnest_tokens(word, description) #Las palabras de decription se separan individualmente
+```
+
+Quitar posibles muletillas o nexos
+```{r}
+tokens <- tokens %>%
+  filter(nchar(word) >= 3)
+```
+
+
+```{r}
+data("stop_words")
+tokens = tokens %>%
+  anti_join(stop_words, by = "word") #Elimina las palabras de tokens comparando la columna word
+```
+
+
+Quitar palabras que casi no aparecen
+```{r}
+word_freq <- tokens %>%
+  count(word, sort = TRUE)
+
+tokens <- tokens %>%
+  semi_join(filter(word_freq, n >= 5), by = "word") 
+```
+
+filtrar con palabras más frecuentes
+```{r}
+top_words <- word_freq %>%
+  slice_head(n = 2000) %>%        # pick top 20000 words
+  pull(word)
+```
+
+
+```{r}
+contar_palabras = tokens %>%
+  count( category, doc_id, word, sort = TRUE) #Contamos cuantas veces sale cada palabra y ordenamos de mayor a menor
+```
+
+```{r}
+sparse_matrix = contar_palabras %>% #El conteo de las palabras se convierte en matriz
+  tuits_df %>%
+  unnest_tokens(input = "text", output = "palabra") %>%
+  count(screen_name, status_id, palabra) %>%
+  spread(key = palabra, value = n)
+
+sparse_matrix$category <- sparse_matrix$category[match(rownames(sparse_matrix), df$doc_id)]
+```
+
+```{r}
+categories = df %>%
+  distinct(doc_id, category) %>% #Se eligen las categorias
+  arrange(match(doc_id, rownames(sparse_matrix))) %>% #Hacemos que coincidan con las filas de la matriz
+  pull(category)
+
+head(categories)
+```
+
+```{r}
+sparse_matrix
+```
+
+```{r}
+categories
+```
+
+# Modelado
+
+## Extraer datos
+
+Vamos a hacer una visualización más intuitiva solo para comprender cómo trabajaremos la matriz
+
+```{r}
+library(tibble)
+
+p <- ncol(sparse_matrix)
+df_preview <- as_tibble(
+  as.matrix(sparse_matrix[1:10, c(1:5, (p-4):p)]), #ver comienzo y final de la matriz
+  rownames = "doc_id"
+)
+
+df_preview
+```
+
+No se unirá categoría para evitar una matriz densa y evitar pasar el límite de memoria de R.
+
+```{r}
+stories <- sparse_matrix    
+target <- categories 
+```
 
 # Limpiar datos
 
@@ -27,18 +143,42 @@ glimpse(stories)
 ```
 
 ```{r}
-data = data |> #checar
-        filter(!is.na(select(category)))
+glimpse(target)
+```
+
+```{r}
+#data = data |> checar
+        #filter(!is.na(select(category))); al no ser un data frame lo adaptamos
+keep = !is.na(target)
+
+stories = stories[keep, ]
+target  = target[keep]
 ```
 
 # Dividir matriz
 
 ```{r}
 library(tidymodels)
+library(caret)
 ```
 
+Ponemos una semilla para replicabilidad.
+
 ```{r}
-story_split= initial_split(data, prop = 0.7)
+set.seed(123)
+```
+
+Adaptamos el split a ambas variables
+
+```{r}
+#story_split= initial_split(data, prop = 0.7)n <- nrow(stories)
+train_idx = sample(seq_len(n), size = floor(0.7 * n)) lo hacemos por índices
+
+train_stories <- stories[train_idx, ]
+train_target  <- target[train_idx]
+
+test_stories  <- stories[-train_idx, ]
+test_target   <- target[-train_idx]
 ```
 
 ```{r}
@@ -104,6 +244,7 @@ confusionMatrix(y_pred2, story_test[["category"]])
 # Simplificar categorías
 
 REHACER SPLIT!!
+
 ```{r}
 data <- stories |>
   mutate(
@@ -128,7 +269,6 @@ y_pred3 = predict(NB_cl3, newdata = story_test)
 confusionMatrix(y_pred3, story_test[["binary_cat"]])
 ```
 
-
 ```{r}
 NB_cl4 = naivebayes(binary_cat ~ . , data = story_train)
 
@@ -143,6 +283,7 @@ confusionMatrix(y_pred4, story_test[["binary_cat"]])
 ```
 
 # Distribución Poisson
+
 ```{r}
 NB_pois = naive_bayes(binary_cat ~ ., train, usepoisson = TRUE)
 ```
@@ -169,8 +310,8 @@ y_predPLAP = predict(NB_poisLAP, story_test)
 confusionMatrix(y_predPLAP, story_test[["binary_cat"]])
 ```
 
-
 # Selección de hiperparámetros
+
 ```{r}
 library(caret)
 ```
@@ -193,7 +334,6 @@ inner_folds = 5
 cv_y_test = c()
 cv_y_pred = c()
 ```
-
 
 ```{r}
 
@@ -258,4 +398,3 @@ cm = confusionMatrix(factor(cv_y_pred, levels = levels(y)),
                       factor(cv_y_test, levels = levels(y)))
 print(cm)
 ```
-
