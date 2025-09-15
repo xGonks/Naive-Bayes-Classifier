@@ -11,7 +11,7 @@
 
 \patchcmd{\thebibliography}{\section*{\refname}}{}{}{}
 
-\title{Naive Bayes classifier for paranormal stories}
+\title{Naive Bayes classifier applied to paranormal stories}
 
 \author{
 Alan Fernando Bravo Pimentel \and
@@ -28,7 +28,11 @@ Miguel Angel Rivas Torres
 \maketitle
 
 \begin{abstract}
-abstact
+Online websites act as repertoires of reports of paranormal experiences, offering a distinctive set of information on cultural beliefs and individual perceptions. This study aims to  explore the use of Natural Language Processing (NLP) techniques to categorize such stories. A Naive Bayes classifier was trained to predict the type of phenomena described. The data acquisition process involved web scraping and drew information from the \textit{Your Ghost Stories} platform, the text was then processed using a count vectorizer, and a sparse matrix for showing frequencies of words was produced. Several iterations of the Naïve Bayes classifier were tested, and several accuracy metrics were utilized for evaluating the model's performance.  
+
+The findings suggest that \_\_\_INFOOO\_\_\_. More precisely, it was noticed that \_\_\_\_\_\_\_\_INFOOOOO\_\_\_\_\_.  
+
+
 \end{abstract}
 
 \section{Introduction}
@@ -39,17 +43,71 @@ This study demonstrates the capabilities of NLP techniques coupled with probabil
 
 
 \section{Methodology}
-In order to acquire the data for the classifier, we employed web scraping to extract narratives from the \textit{Your Ghost Stories} platform. The first step was to verify scraping permission using the paths\_allowed() function from the robotstxt library in R. Then, the script used identified the relevant elements to capture such as the title of each story, its description as well as metadata such as country, state, and category. Additionally, a custom function called get\_story() was implemented so as to automate the process and extract multiple stories in parallel, which increased efficiency. The resulting dataset was structured into an organized table containing fields for id, title, country, state, category and description. Finally, the data were exported to a CSV file which contained up to 28,600 different observations/stories. \\
-The text's preparation for analysis came next. 
-Each story was tokenized in turn, allowing the narrative descriptions to be broken down into discrete words. Then, the most common stop words were eliminated and Only the most instructive terms remained in the text. A frequency count of the words that appeared in each document was then produced, offering a systematic method of  expressing the narratives numerically. These word counts were then transformed into a sparse matrix, where each row corresponded to a story and each column represented a unique word (feature). The entries of the matrix indicated the frequency of each word inside a particular story. 
+In order to acquire the data for the classifier, we employed web scraping to extract narratives from the \textit{Your Ghost Stories} platform. The first step was to verify scraping permission using the paths\_allowed() function from the robotstxt library in R. Then, the script used identified the relevant elements to capture such as the title of each story, its description as well as metadata such as country, state, and category. Additionally, a custom function called get\_story() was implemented so as to automate the process and extract multiple stories in parallel, which increased efficiency. The resulting dataset was structured into an organized table containing fields for id, title, country, state, category and description. Finally, the data were exported to a CSV file. \\
+The preparation of the text for analysis began with each story being tokenized in turn, allowing the narrative descriptions to be broken down into discrete words. Then, the most common stop words were eliminated and Only the most instructive terms remained in the text. A frequency count of the words that appeared in each document was then produced, offering a systematic method of  expressing the narratives numerically. These word counts were then transformed into a sparse matrix, where each row corresponded to a story and each column represented a unique word (feature). The entries of the matrix indicated the frequency of each word inside a particular story. 
 Finally, the categories associated with each story were aligned with the rows of the newly created sparse matrix, so that we could create a dataset in which we could represent the information quantitatively and keep it linked to its respective class label.
+Afterward, a naive Bayes Classifier was trained on the dataset. This classifier relies the assumption of conditional independence between features, which in practice means that the presence of one word in a document is considered independent of the presence of any other word given the category. The classifier also relies on the Bayes Theorem to calculate the probability that a certain observation belongs to a class.
+In particular, given a new observation, 
+\( \tilde{\boldsymbol{x}} = (\tilde{x}_{1}, \dots, \tilde{x}_{p})^{\intercal}\tilde{\boldsymbol{x}}.\)
+we compute
+\[
+\mathbb{P}(Y = k \mid \boldsymbol{X} = \tilde{\boldsymbol{x}}) = \frac{\mathbb{P}(Y = k)f(\tilde{\boldsymbol{x}} \mid y = k)}{\sum_{k = 1}^{K} \mathbb{P}(Y = k)f(\tilde{\boldsymbol{x}} \mid y = k)}
+\]
+
+
+
+The implementation was carried out using several approaches including the "naivebayes" package in R. As per usual, the training set was defined by randomly sampling 70\% of the data, while the other 30\% was reserved for testing. The performance of our classifier was then evaluated using accuracy, precision, recall, and F1-score to capture overall performance when predicting and performance in individual categories.
+Finally, certain improvements were made to fix common problems with text classification.  The Poisson distribution was investigated so that it could be used as a substitute for the standard assumption in the naive Bayes model as word counts are discrete and sometimes sparse. Another tool employed was Laplace smoothing and it was also used to manage the zeros in the matrix and prevent zero classification probabilities. Cross-validation techniques were also used and helped us find the smoothing parameter's most optimal value and improve the performance of the classifier.
+
 
 
 \section{Application}
-applications
+During the web scrapping process, up to 20,125 different observations/stories were retrieved. As mentioned in the methodolgy, a sparse matrix was built using those data, this sparse matrix represented every word as a column and showed how frequently the words show up in each story. However, due to computational limits, this sparse matrix was reduced to only the 3000 most frequent words. In addition to that, all categories were joined together and appended to the sparse matrix before turning it into a dataframe. Note that null values were removed and some stories were discarded, leaving us with 20,106 usable stories. The following graphs show the most frequent combinations of 1, 2 and 3 words across all categories.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\columnwidth]{figures/unigrams.png}
+    \caption{10 most frequent words}
+    \label{unigrams}
+\end{figure}
 
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\columnwidth]{figures/bigrams.png}
+    \caption{10 most frequent combinations of two words}
+    \label{unigrams}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\columnwidth]{figures/unigrams.png}
+    \caption{10 most frequent combinations of three words}
+    \label{unigrams}
+\end{figure}
+
+Furthermore, several iterations of a naive Bayes classifier were trained on this data. The first one of which being  
+
+
+
+
+which yielded the following results:
+
+
+Moreover, the results obtained by the classifier that used the "naivebayes" package in R were the following:
+
+
+As we can see, the main differences were 
+
+
+
+After incorporating the case\_when() function, the results were
+
+
+Since the supposition that all children nodes have gaussian distributions seems little relevant considering that words are discrete objects, a Poisson distribution seems to be a more appropiate alternative, therefore a classifier was trained with this modification and showed 
+
+
+Given that there are many zeroes in the matrix, a smoothing technique like Laplace Smoothing was added to the classifier as well as cross-validation for feature selection and we got the following results:
 \section{Conclusions}
-conclusions
+The stories were 
 
 
 \section{References}
@@ -59,9 +117,9 @@ conclusions
 \setlength{\parskip}{0pt}
 
 
-\bibitem{text}
-text. 
-\url{url}
+\bibitem{RPubs}
+RPubs - Naïve Bayes con R para clasificacion de texto. (n.d.).
+\url{https://rpubs.com/jboscomendoza/naive_nayes_con_r_clasificacion_texto}
 
 \vspace{0.3cm}
 

@@ -1,0 +1,306 @@
+---
+title: "scrap"
+author: "Todos"
+format:
+   html:
+     toc: true
+     html-math-method: katex
+     embed-resources: true
+     self-contained-math: true
+     df-print: kable
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(knitr)
+library(janeaustenr)
+```
+
+```{r}
+lines <- readLines("../data/data_pages.csv", encoding = "UTF-8")
+split_lines <- strsplit(lines, "#\\$%#\\$%")
+
+data_pages_loaded <- as.data.frame(do.call(rbind, split_lines), stringsAsFactors = FALSE)
+
+colnames(data_pages_loaded) <- data_pages_loaded[1, ]
+data_pages_loaded <- data_pages_loaded[-1, ]
+rownames(data_pages_loaded) <- NULL
+
+data_pages_loaded
+```
+
+```{r}
+colnames(data_pages_loaded) <- gsub('"', '', colnames(data_pages_loaded))
+
+data_pages_loaded <- data_pages_loaded %>%
+  mutate(
+    state = if_else(is.na(state) | state == "" | state == "NA", country, state)
+  ) %>%
+  filter(!(is.na(category) | category == "" | category == "NA"))
+
+#data_pages_loaded <- data_pages_loaded %>% slice_sample(n = 2000)
+```
+
+```{r}
+data_words <- data_pages_loaded |>
+  unnest_tokens(output = word, input = description) 
+```
+
+```{r}
+data_pages_loaded |>
+  unnest_tokens(word, description) |>
+  count(category, word, sort = TRUE) |>
+  group_by(category) |>
+  slice_head(n = 10) |>
+  pivot_wider(
+    names_from = category, 
+    values_from = n,
+    values_fn = as.character,
+    values_fill = "Not in top 10"
+  ) |>
+  kable()
+```
+
+```{r}
+data_pages_loaded |>
+  unnest_tokens(word, description) |>
+  anti_join(stop_words, by = "word") |>
+  count(category, word, sort = TRUE) |>
+  group_by(category) |>
+  slice_head(n = 10) |>
+  ggplot(aes(y = word, x = n, fill = category)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~category, scales = "free") +
+  labs(y = NULL)
+```
+
+```{r}
+g1 <- data_pages_loaded |>
+  unnest_tokens(word, description) |>
+  anti_join(stop_words, by = "word") |>
+  count(category, word, sort = TRUE) |>
+  group_by(category) |>
+  slice_head(n = 10) |>
+  ggplot(aes(y = reorder_within(word, n, category), x = n, fill = category)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~category, scales = "free") +
+  scale_y_reordered() +
+  labs(y = NULL)
+
+ggsave("../figures/unigrams.png", plot = g1, width = 10, height = 6)
+```
+
+```{r}
+data_bigrams <- data_pages_loaded %>%
+  unnest_tokens(bigram, description, token = "ngrams", n = 2) %>%
+  filter(!is.na(bigram)) %>%
+  separate(bigram, into = c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word, !word2 %in% stop_words$word) %>%
+  unite(bigram, word1, word2, sep = " ")
+
+data_bigrams
+```
+
+```{r}
+g2 <- data_pages_loaded %>%
+  unnest_tokens(bigram, description, token = "ngrams", n = 2) %>%
+  filter(!is.na(bigram)) %>%
+  separate(bigram, into = c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word, !word2 %in% stop_words$word) %>%
+  unite(bigram, word1, word2, sep = " ") %>%
+  count(category, bigram, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 10) %>%
+  ggplot(aes(y = reorder_within(bigram, n, category), x = n, fill = category)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~category, scales = "free") +
+  scale_y_reordered() +
+  labs(y = NULL)
+
+ggsave("../figures/bigrams.png", plot = g2, width = 10, height = 6)
+```
+
+```{r}
+g3 <- data_pages_loaded %>%
+  unnest_tokens(trigram, description, token = "ngrams", n = 3) %>%
+  filter(!is.na(trigram)) %>%
+  separate(trigram, into = c("w1", "w2", "w3"), sep = " ") %>%
+  filter(!w1 %in% stop_words$word, !w2 %in% stop_words$word, !w3 %in% stop_words$word) %>%
+  unite(trigram, w1, w2, w3, sep = " ") %>%
+  count(category, trigram, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 10) %>%
+  ggplot(aes(y = reorder_within(trigram, n, category), x = n, fill = category)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~category, scales = "free") +
+  scale_y_reordered() +
+  labs(y = NULL)
+
+ggsave("../figures/trigrams.png", plot = g3, width = 10, height = 6)
+```
+
+```{r}
+sentiments <- get_sentiments("afinn")
+sentiments
+```
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(stringr)
+library(furrr)
+
+# Plan de ejecución paralela
+plan(multisession, workers = parallel::detectCores() - 1)
+
+# --- Palabras ---
+data_words <- data_pages_loaded %>%
+  unnest_tokens(word, description) %>%
+  anti_join(stop_words, by = "word")
+
+top_words_per_category <- data_words %>%
+  count(category, word, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 20) %>%
+  ungroup()
+
+top_words_list <- unique(top_words_per_category$word)
+
+# --- Bigramas ---
+data_bigrams <- data_pages_loaded %>%
+  unnest_tokens(bigram, description, token = "ngrams", n = 2) %>%
+  filter(!is.na(bigram)) %>%
+  separate(bigram, into = c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word, !word2 %in% stop_words$word) %>%
+  unite(bigram, word1, word2, sep = " ")
+
+top_bigrams_per_category <- data_bigrams %>%
+  count(category, bigram, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+top_bigrams_list <- unique(top_bigrams_per_category$bigram)
+
+# --- Trigramas ---
+data_trigrams <- data_pages_loaded %>%
+  unnest_tokens(trigram, description, token = "ngrams", n = 3) %>%
+  filter(!is.na(trigram)) %>%
+  separate(trigram, into = c("w1", "w2", "w3"), sep = " ") %>%
+  filter(!w1 %in% stop_words$word,
+         !w2 %in% stop_words$word,
+         !w3 %in% stop_words$word) %>%
+  unite(trigram, w1, w2, w3, sep = " ")
+
+top_trigrams_per_category <- data_trigrams %>%
+  count(category, trigram, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+top_trigrams_list <- unique(top_trigrams_per_category$trigram)
+
+# --- Crear base modificada ---
+data_pages_modified <- data_pages_loaded %>%
+  select(id, title, category, country, state)
+
+# --- Contar ocurrencias en paralelo ---
+word_counts <- future_map_dfc(top_words_list,
+                              ~ str_count(data_pages_loaded$description, fixed(.x)))
+names(word_counts) <- top_words_list
+
+bigram_counts <- future_map_dfc(top_bigrams_list,
+                                ~ str_count(data_pages_loaded$description, fixed(.x)))
+names(bigram_counts) <- top_bigrams_list
+
+trigram_counts <- future_map_dfc(top_trigrams_list,
+                                 ~ str_count(data_pages_loaded$description, fixed(.x)))
+names(trigram_counts) <- top_trigrams_list
+
+# --- Combinar ---
+data_pages_modified <- data_pages_modified %>%
+  bind_cols(word_counts, bigram_counts, trigram_counts) %>%
+  select(id, title, country, state, category,
+         all_of(top_words_list),
+         all_of(top_bigrams_list),
+         all_of(top_trigrams_list),
+         everything())
+
+# --- Exportar ---
+write.csv(data_pages_modified, "../data/data_pages_modified.csv", row.names = FALSE)
+
+data_pages_modified
+
+```
+
+```{r}
+data_words <- data_pages_loaded %>%
+  unnest_tokens(word, description) %>%
+  anti_join(stop_words, by = "word")
+
+top_words_per_category <- data_words %>%
+  count(category, word, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 20) %>%
+  ungroup()
+
+top_words_list <- top_words_per_category$word %>% unique()
+
+data_bigrams <- data_pages_loaded %>%
+  unnest_tokens(bigram, description, token = "ngrams", n = 2) %>%
+  filter(!is.na(bigram)) %>%
+  separate(bigram, into = c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word, !word2 %in% stop_words$word) %>%
+  unite(bigram, word1, word2, sep = " ")
+
+top_bigrams_per_category <- data_bigrams %>%
+  count(category, bigram, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+top_bigrams_list <- top_bigrams_per_category$bigram %>% unique()
+
+data_trigrams <- data_pages_loaded %>%
+  unnest_tokens(trigram, description, token = "ngrams", n = 3) %>%
+  filter(!is.na(trigram)) %>%
+  separate(trigram, into = c("w1", "w2", "w3"), sep = " ") %>%
+  filter(!w1 %in% stop_words$word, !w2 %in% stop_words$word, !w3 %in% stop_words$word) %>%
+  unite(trigram, w1, w2, w3, sep = " ")
+
+top_trigrams_per_category <- data_trigrams %>%
+  count(category, trigram, sort = TRUE) %>%
+  group_by(category) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+top_trigrams_list <- top_trigrams_per_category$trigram %>% unique()
+
+data_pages_modified <- data_pages_loaded %>%
+  select(id, title, category, country, state)
+
+for (w in top_words_list) {
+  data_pages_modified[[w]] <- str_count(data_pages_loaded$description, fixed(w))
+}
+
+for (b in top_bigrams_list) {
+  data_pages_modified[[b]] <- str_count(data_pages_loaded$description, fixed(b))
+}
+
+for (t in top_trigrams_list) {
+  data_pages_modified[[t]] <- str_count(data_pages_loaded$description, fixed(t))
+}
+
+data_pages_modified <- data_pages_modified %>%
+  select(id, title, country, state, category, all_of(top_words_list), all_of(top_bigrams_list),                  all_of(top_trigrams_list), everything())
+
+write.csv(data_pages_modified, "../data/data_pages_modified.csv", row.names = FALSE)
+
+data_pages_modified
+```
+
+```{r}
+
+```
