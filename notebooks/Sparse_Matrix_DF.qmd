@@ -1,0 +1,83 @@
+---
+title: "Sparse_Matrix_Final"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(Matrix)
+
+
+df = read_delim(
+  "~/Naive-Bayes-Classifier/data/data_pages.csv",
+  delim = "#$%#$%",
+  trim_ws = TRUE
+)
+
+
+df = df %>%
+  filter(!is.na(title), !is.na(description)) %>%
+  mutate(doc_id = paste0(row_number(), "_", title))  
+
+```
+
+```{r}
+
+tokens = df %>%
+  select(doc_id, category, description) %>%
+  unnest_tokens(word, description)
+
+
+data("stop_words")  
+
+
+tokens = tokens %>%
+  anti_join(stop_words, by = "word")
+
+```
+
+```{r}
+contar_palabras = tokens %>%
+  count(doc_id, word, sort = TRUE)
+
+```
+
+```{r}
+sparse_matrix = contar_palabras %>%
+  cast_sparse(doc_id, word, n)
+
+
+top_words = colSums(sparse_matrix) %>% sort(decreasing = TRUE) %>% head(3000) %>% names()
+sparse_matrix = sparse_matrix[, top_words]
+
+
+dim(sparse_matrix)
+sparse_matrix[1:5, 1:5]
+
+```
+
+```{r}
+
+df_matrix = as.data.frame(as.matrix(sparse_matrix))
+
+
+```
+
+```{r}
+categories <- df %>%
+  distinct(doc_id, category) %>%
+  arrange(match(doc_id, rownames(sparse_matrix))) %>%
+  pull(category)
+```
+
+```{r}
+
+df_matrix$category = categories
+```
+
+```{r}
+
+write_csv(df_matrix,"~/Naive-Bayes-Classifier/data/Sparse_Matrix.csv")
+```
