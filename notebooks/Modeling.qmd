@@ -183,7 +183,7 @@ cm$overall["Accuracy"]
 ```
 Para resumir esta información se creó una función para sacar los estadísticos globales
 ```{r}
-#ChatGPT (GPT-5 Mini). (2025). R function get_caret_report for summarizing confusion matrix metrics [Computer software]. OpenAI.
+# Para hacer esta sección se hizo uso de ChatGPT para optimizar el código propuesto. ChatGPT (GPT-5 Mini). (2025). R function get_caret_report for summarizing confusion matrix metrics [Computer software]. OpenAI.
 get_caret_report = function(cm) { 
   accuracy = unname(cm$overall["Accuracy"])
   byclass  = cm$byClass
@@ -260,7 +260,7 @@ res$per_class     # precision/recall/F1/support por clase
 
 ```
 
-## Naive Bayes método 2
+### Naive Bayes método 2
 
 ```{r}
 #install.packages("naivebayes")
@@ -303,7 +303,7 @@ setdiff(names(story_test), names(story_train))
 
 ```
 
-### Confusion Matrix
+#### Confusion Matrix
 
 ```{r}
 cm2 = confusionMatrix(y_pred2, y_true, mode = "everything")
