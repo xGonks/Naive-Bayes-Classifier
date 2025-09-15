@@ -8,8 +8,10 @@ format:
      embed-resources: true
      self-contained-math: true
      df-print: kable
-editor: source
+editor: visual
 ---
+
+# Sparse Matrix
 
 ```{r}
 library(tidyverse)
@@ -78,56 +80,45 @@ categories <- df %>%
   pull(category)
 ```
 
-
 ```{r}
 
 df_matrix$category = categories
 ```
 
-
 # Modelado
 
-## Extraer datos
-
+### Extraer datos
 
 Ultimas columnas de la matriz para serciorarnos que si se agregó categoría
+
 ```{r}
 
 df_matrix [, (ncol(df_matrix )-4):ncol(df_matrix )]
        
 ```
 
+### Limpiar datos
 
-```
-
-# Limpiar datos
+cambiamos el nombre para facil referencia
 
 ```{r}
 stories = df_matrix
 head(stories)
 ```
 
+quitamos nans
 
 ```{r}
 stories = stories %>%
   filter(!is.na(category))
 ```
 
+## Modelo Naive Bayes
 
-```{r}
-#data = data |> checar
-        #filter(!is.na(select(category))); al no ser un data frame lo adaptamos
-keep = !is.na(target)
-
-stories = stories[keep, ]
-target  = target[keep]
-```
-
-# Dividir matriz
+#### Dividir matriz
 
 ```{r}
 library(tidymodels)
-library(caret)
 ```
 
 Ponemos una semilla para replicabilidad.
@@ -139,14 +130,7 @@ set.seed(123)
 Adaptamos el split a ambas variables
 
 ```{r}
-#story_split= initial_split(data, prop = 0.7)n <- nrow(stories)
-train_idx = sample(seq_len(n), size = floor(0.7 * n)) lo hacemos por índices
-
-train_stories <- stories[train_idx, ]
-train_target  <- target[train_idx]
-
-test_stories  <- stories[-train_idx, ]
-test_target   <- target[-train_idx]
+story_split= initial_split(stories, prop = 0.7)
 ```
 
 ```{r}
@@ -155,39 +139,133 @@ story_test = testing(story_split)
 ```
 
 ```{r}
-install.packages("e1071")
+y_test = factor(story_test[["category"]]) #para debuggear
 ```
+
+```{r}
+#install.packages("e1071")
+```
+
+### Modelo e1071
 
 ```{r}
 library(e1071)
 ```
 
 ```{r}
-NB_cl1 = naiveBayes(category ~ . , data = diabetes_train)
+NB_cl1 = naiveBayes(category ~ . , data = story_train)
 ```
 
 ```{r}
 y_pred1 = predict(NB_cl1, newdata = story_test)
 ```
 
-## Matriz confusión
+#### Matriz confusión
 
 ```{r}
-confusionMatrix(y_pred1, story_test[["category"]])
+library(caret)
 ```
 
 ```{r}
-cm = table(story_test$category, y_pred1)
+y_pred1 = factor(y_pred1)
+y_true = factor(story_test[["category"]])
+y_pred1 = factor(y_pred1, levels = levels(y_true)) #que tenga en cuenta que existen todas las categorías a pesar de si no las categoriza como tal
 ```
 
 ```{r}
-sum(diag(cm))/ sum(cm)
+cm = confusionMatrix(y_pred1, y_true, mode = "everything")
+cm
 ```
 
-# Naive bayes método 2
+```{r}
+cm$overall["Accuracy"]
+
+```
 
 ```{r}
-install.packages("naivebayes")
+get_caret_report = function(cm) {
+  accuracy = unname(cm$overall["Accuracy"])
+  byclass  = cm$byClass
+
+  # Normalize byClass into a data.frame with one row per class
+  if (is.matrix(byclass)) {
+    per_class_df = as.data.frame(byclass)
+  } else {
+    per_class_df = as.data.frame(t(byclass), stringsAsFactors = FALSE)
+    # set rowname to positive label if available
+    if (!is.null(cm$positive)) rownames(per_class_df) = cm$positive
+  }
+
+  # robustly find column names for precision/recall/f1 (different caret versions)
+  cols = colnames(per_class_df)
+  find_col = function(patterns) {
+    idx = grep(paste(patterns, collapse = "|"), cols, ignore.case = TRUE)
+    if (length(idx)) cols[idx[1]] else NA_character_
+  }
+  prec_col = find_col(c("precision", "pos pred", "ppv"))
+  rec_col  = find_col(c("recall", "sensitivity"))
+  f1_col   = find_col("f1")
+
+  # get confusion table and compute per-class TP/pred/actual (rows = prediction, cols = reference)
+  tab = as.matrix(cm$table)
+  tp = diag(tab)
+  pred_pos = rowSums(tab)  # predicted positives (rows)
+  act_pos  = colSums(tab)  # actual positives (cols)
+
+  # Per-class precision/recall/f1 (use caret values if present, otherwise compute)
+  precision_i = if (!is.na(prec_col)) per_class_df[[prec_col]] else tp / pred_pos
+  recall_i    = if (!is.na(rec_col))  per_class_df[[rec_col]]  else tp / act_pos
+  f1_i        = if (!is.na(f1_col))   per_class_df[[f1_col]]   else
+                 ifelse((precision_i + recall_i) == 0, 0,
+                        2 * precision_i * recall_i / (precision_i + recall_i))
+
+  per_class_metrics = data.frame(
+    class     = rownames(per_class_df),
+    precision = precision_i,
+    recall    = recall_i,
+    f1        = f1_i,
+    support   = act_pos,
+    stringsAsFactors = FALSE
+  )
+
+  # Macro averages (mean of per-class) and micro averages (global counts)
+  macro_precision = mean(per_class_metrics$precision, na.rm = TRUE)
+  macro_recall    = mean(per_class_metrics$recall,    na.rm = TRUE)
+  macro_f1        = mean(per_class_metrics$f1,        na.rm = TRUE)
+
+  micro_precision = sum(tp) / sum(pred_pos)
+  micro_recall    = sum(tp) / sum(act_pos)
+  micro_f1 = if ((micro_precision + micro_recall) == 0) 0 else
+              2 * micro_precision * micro_recall / (micro_precision + micro_recall)
+
+  summary_df = data.frame(
+    Accuracy      = accuracy,
+    MacroPrecision= macro_precision,
+    MacroRecall   = macro_recall,
+    MacroF1       = macro_f1,
+    MicroPrecision= micro_precision,
+    MicroRecall   = micro_recall,
+    MicroF1       = micro_f1,
+    row.names = NULL,
+    stringsAsFactors = FALSE
+  )
+
+  list(summary = summary_df, per_class = per_class_metrics)
+}
+
+```
+
+```{r}
+res = get_caret_report(cm)
+res$summary       # macro/micro + accuracy
+res$per_class     # precision/recall/F1/support per class
+
+```
+
+## Naive Bayes método 2
+
+```{r}
+#install.packages("naivebayes")
 ```
 
 ```{r}
@@ -195,102 +273,204 @@ library(naivebayes)
 ```
 
 ```{r}
-NB_cl2 = naivebayes(category ~ . , data = story_train)
+NB_cl2 = naive_bayes(category ~ . , data = story_train)
 
+```
+
+naive_bayes necesita que el test set no tenga el target
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+story_test = story_test %>% dplyr::select(-category)
 ```
 
 ```{r}
 y_pred2 = predict(NB_cl2, story_test)
 ```
 
-## Cofusion Matrix
+#### Debug
 
 ```{r}
-confusionMatrix(y_pred2, story_test[["category"]])
+#DEBUG
+dim(story_train)
+dim(story_test)
 ```
 
-# Simplificar categorías
+```{r}
+setdiff(names(story_train), names(story_test))
+setdiff(names(story_test), names(story_train))
 
-REHACER SPLIT!!
+```
+
+
+### Confusion Matrix
 
 ```{r}
-data <- stories |>
+cm2 = confusionMatrix(y_pred2, y_true, mode = "everything")
+cm2
+```
+
+```{r}
+cm2$overall["Accuracy"]
+```
+
+```{r}
+res2 = get_caret_report(cm2)
+res2$summary       # macro/micro + accuracy
+res2$per_class 
+```
+
+## Simplificar categorías
+
+```{r}
+stories_bin = stories |>
   mutate(
     binary_cat = case_when(
       category == "Haunted Places" ~ "Haunted Places",
-      TRUE ~ "Other"   # default for all other cases
+      TRUE ~ "Other"   
     )
   )
 ```
 
-## Clasificación
-
 ```{r}
-NB_cl3 = naiveBayes(binary_cat ~ . , data = diabetes_train)
+stories_bin = stories_bin |>
+  select(-category)
 ```
 
 ```{r}
-y_pred3 = predict(NB_cl3, newdata = story_test)
+storybin_split= initial_split(stories_bin, prop = 0.7)
 ```
 
 ```{r}
-confusionMatrix(y_pred3, story_test[["binary_cat"]])
+storybin_train = training(storybin_split)
+storybin_test = testing(storybin_split)
+```
+
+### Clasificación e1071
+
+```{r}
+NB_cl3 = naiveBayes(binary_cat ~ . , data = storybin_train)
 ```
 
 ```{r}
-NB_cl4 = naivebayes(binary_cat ~ . , data = story_train)
+y_pred3 = predict(NB_cl3, newdata = storybin_test)
+```
+
+```{r}
+y_pred3 = factor(y_pred3)
+y_trueBIN = factor(storybin_test[["binary_cat"]])
+y_pred3 = factor(y_pred3, levels = levels(y_trueBIN)) #que tenga en cuenta que existen todas las categorías a pesar de si no las categoriza como tal
+```
+
+#### Confusion Matrix
+
+```{r}
+cm3 = confusionMatrix(y_pred3, y_trueBIN, positive = "Haunted Places", mode = "everything")
+cm3
+```
+
+```{r}
+res3 = get_caret_report(cm3)
+res3$summary       # macro/micro + accuracy
+res3$per_class
+```
+
+##### Debug
+
+```{r}
+table(storybin_train$binary_cat)
+table(storybin_test$binary_cat)
+table(y_pred3)
+```
+
+```{r}
+y_pred3
+```
+
+```{r}
+y_trainBIN = factor(storybin_train[["binary_cat"]])
+```
+
+
+### Clasificación 2
+
+```{r}
+NB_cl4 = naive_bayes(binary_cat ~ . , data = storybin_train)
 
 ```
 
 ```{r}
-y_pred4 = predict(NB_cl4, story_test)
+storybin_test = storybin_test %>% dplyr::select(-binary_cat)
 ```
 
 ```{r}
-confusionMatrix(y_pred4, story_test[["binary_cat"]])
+y_pred4 = predict(NB_cl4, storybin_test)
 ```
 
-# Distribución Poisson
+#### Confusion matrix
 
 ```{r}
-NB_pois = naive_bayes(binary_cat ~ ., train, usepoisson = TRUE)
-```
-
-```{r}
-y_predP = predict(NB_pois, story_test)
+cm4 = confusionMatrix(y_pred4, y_trueBIN,positive = "Haunted Places", mode = "everything")
+cm4
 ```
 
 ```{r}
-confusionMatrix(y_predP, story_test[["binary_cat"]])
+res4 = get_caret_report(cm4)
+res4$summary       # macro/micro + accuracy
+res4$per_class
 ```
 
-# Laplace smoothening
+## Distribución Poisson
 
 ```{r}
-NB_poisLAP = naive_bayes(binary_cat ~ ., train, usepoisson = TRUE, laplace = 1)
-```
-
-```{r}
-y_predPLAP = predict(NB_poisLAP, story_test)
-```
-
-```{r}
-confusionMatrix(y_predPLAP, story_test[["binary_cat"]])
-```
-
-# Selección de hiperparámetros
-
-```{r}
-library(caret)
+NB_pois = naive_bayes(binary_cat ~ ., storybin_train, usepoisson = TRUE)
 ```
 
 ```{r}
-X_df = story_train |> select(-binary_cat)
-y   = story_train$binary_cat
+y_predP = predict(NB_pois, storybin_test)
+```
+
+### Confusion Matrix
+
+```{r}
+cmP = confusionMatrix(y_predP, y_trueBIN, mode = "everything")
+cmP
+```
+
+## Laplace smoothening
+
+```{r}
+NB_poisLAP = naive_bayes(binary_cat ~ ., storybin_train, usepoisson = TRUE, laplace = 1)
+```
+
+```{r}
+y_predPLAP = predict(NB_poisLAP, storybin_test)
+```
+
+### Confusion Matrix
+
+```{r}
+cmPLAP = confusionMatrix(y_predPLAP, y_trueBIN, mode = "everything")
+cmPLAP
+```
+
+## Selección de hiperparámetros
+
+dividir target y predictors
+
+> Éste código es una adaptación de un proyecto con el Profesor Omar
+
+```{r}
+X_df = storybin_train |> dplyr::select(-binary_cat)
+y    = storybin_train$binary_cat
 ```
 
 ```{r}
 laplace_vals = seq(0.1, 5, by = 0.5)
+set.seed(456)
 ```
 
 ```{r}
@@ -301,24 +481,25 @@ inner_folds = 5
 ```{r}
 cv_y_test = c()
 cv_y_pred = c()
+ultimate_laplace = c()
 ```
 
 ```{r}
-
 for (outer in outer_folds) {
   X_train_outer = X_df[-outer, ]
   y_train_outer = y[-outer]
   X_test_outer  = X_df[outer, ]
   y_test_outer  = y[outer]
   
-  # Inner loop: elegir mejor Laplace
+  # Inner loop → pick best Laplace (by Recall)
   best_alpha = NULL
-  best_acc = 0
+  best_recall = -Inf
   
   inner_idx = createFolds(y_train_outer, k = inner_folds, returnTrain = FALSE)
   
   for (lap in laplace_vals) {
-    acc_inner = c()
+    recalls_inner = c()
+    
     for (fold in inner_idx) {
       X_sub_train = X_train_outer[-fold, ]
       y_sub_train = y_train_outer[-fold]
@@ -326,43 +507,74 @@ for (outer in outer_folds) {
       y_val       = y_train_outer[fold]
       
       model_inner = naive_bayes(x = X_sub_train, y = y_sub_train,
-                                 laplace = lap, usepoisson = TRUE)
+                                laplace = lap, usepoisson = TRUE)
       pred_val = predict(model_inner, X_val)
-      acc_inner = c(acc_inner, mean(pred_val == y_val))
+      
+      cm_val = confusionMatrix(pred_val, y_val, positive = "Haunted Places")
+      recalls_inner = c(recalls_inner, cm_val$byClass["Recall"])
     }
     
-    avg_acc = mean(acc_inner)
-    if (avg_acc > best_acc) {
-      best_acc = avg_acc
-      best_alpha = lap
+    avg_recall = mean(recalls_inner, na.rm = TRUE)
+    
+    if (avg_recall > best_recall) {
+      best_recall = avg_recall
+      best_alpha  = lap
     }
   }
-```
-
-```{r}
- 
-  cat("***************\n")
-  cat("Best laplace:", best_alpha, 
-      " Best Acc (validation):", round(best_acc, 4), "\n")
   
-```
-
-```{r}
-# Train final model con el mejor laplace encontrado
+  # Save chosen laplace for this outer fold
+  chosen_laplace = c(chosen_laplace, best_alpha)
+  
+  # Train outer model with best Laplace
   final_model = naive_bayes(x = X_train_outer, y = y_train_outer,
-                             laplace = best_alpha, usepoisson = TRUE)
+                            laplace = best_alpha, usepoisson = TRUE)
   pred_outer = predict(final_model, X_test_outer)
   
-  acc_test = mean(pred_outer == y_test_outer)
-  cat("Acc (test):", round(acc_test, 4), "\n")
-  
-  cv_y_test = c(cv_y_test, as.character(y_test_outer))
-  cv_y_pred = c(cv_y_pred, as.character(pred_outer))
+  cv_y_test  = c(cv_y_test, y_test_outer)
+  cv_y_pred  = c(cv_y_pred, pred_outer)
 }
 ```
 
+
 ```{r}
-cm = confusionMatrix(factor(cv_y_pred, levels = levels(y)),
-                      factor(cv_y_test, levels = levels(y)))
-print(cm)
+cm_nested = confusionMatrix(factor(cv_y_pred, levels = levels(y_trueBIN)),
+                            factor(cv_y_test, levels = levels(y_trueBIN)),
+                            mode = "everything",
+                            positive = "Haunted Places")
+cm_nested
 ```
+
+```{r}
+cat("Laplace chosen per outer fold:\n")
+print(chosen_laplace)
+cat("Most frequent/best Laplace overall:", 
+    names(sort(table(chosen_laplace), decreasing = TRUE))[1], "\n")
+```
+
+## Resumen
+
+```{r}
+# Collect summaries from all models
+results_list = list(
+  "NaiveBayes_e1071"        = cm,
+  "NaiveBayes_naivebayes"   = cm2,
+  "Binary_e1071"            = cm3,
+  "Binary_naivebayes"       = cm4,
+  "Binary_Poisson"          = cmP,
+  "Binary_Poisson_Laplace"  = cmPLAP,
+  "Binary_BestLaplace"      = cm_nested
+  # add "Binary_NestedCV" = cm_nested if you also want nested CV result
+)
+
+# Apply your report function to each confusion matrix
+summary_all = purrr::map_dfr(
+  results_list,
+  ~ get_caret_report(.x)$summary,
+  .id = "Model"
+)
+
+# Print combined table
+summary_all
+
+```
+
