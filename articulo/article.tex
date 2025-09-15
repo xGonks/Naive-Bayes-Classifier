@@ -30,7 +30,7 @@ Miguel Angel Rivas Torres
 \begin{abstract}
 Online websites act as repertoires of reports of paranormal experiences, offering a distinctive set of information on cultural beliefs and individual perceptions. This study aims to  explore the use of Natural Language Processing (NLP) techniques to categorize such stories. A Naive Bayes classifier was trained to predict the type of phenomena described. The data acquisition process involved web scraping and drew information from the \textit{Your Ghost Stories} platform, the text was then processed using a count vectorizer, and a sparse matrix for showing frequencies of words was produced. Several iterations of the Naïve Bayes classifier were tested, and several accuracy metrics were utilized for evaluating the model's performance.  
 
-The findings suggest that \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_. More precisely, it was noticed that \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_.  
+The findings suggest that \_\_\_INFOOO\_\_\_. More precisely, it was noticed that \_\_\_\_\_\_\_\_INFOOOOO\_\_\_\_\_.  
 
 
 \end{abstract}
@@ -56,14 +56,56 @@ we compute
 
 
 
-The implementation was carried out using the "naivebayes" package in R. As per usual, the training set was defined by randomly sampling 70\% of the data, while the other 30\% was reserved for testing. The performance of our classifier was then evaluated using accuracy, precision, recall, and F1-score to capture overall performance when predicting and performance in individual categories.
+The implementation was carried out using several approaches including the "naivebayes" package in R. As per usual, the training set was defined by randomly sampling 70\% of the data, while the other 30\% was reserved for testing. The performance of our classifier was then evaluated using accuracy, precision, recall, and F1-score to capture overall performance when predicting and performance in individual categories.
 Finally, certain improvements were made to fix common problems with text classification.  The Poisson distribution was investigated so that it could be used as a substitute for the standard assumption in the naive Bayes model as word counts are discrete and sometimes sparse. Another tool employed was Laplace smoothing and it was also used to manage the zeros in the matrix and prevent zero classification probabilities. Cross-validation techniques were also used and helped us find the smoothing parameter's most optimal value and improve the performance of the classifier.
 
 
 
 \section{Application}
-During the web scaping process, up to 28,600 different observations/stories were retrieved. 
+During the web scrapping process, up to 20,125 different observations/stories were retrieved. As mentioned in the methodolgy, a sparse matrix was built using those data, this sparse matrix represented every word as a column and showed how frequently the words show up in each story. However, due to computational limits, this sparse matrix was reduced to only the 3000 most frequent words. In addition to that, all categories were joined together and appended to the sparse matrix before turning it into a dataframe. Note that null values were removed and some stories were discarded, leaving us with 20,106 usable stories. The following graphs show the most frequent combinations of 1, 2 and 3 words across all categories.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\columnwidth]{figures/unigrams.png}
+    \caption{10 most frequent words}
+    \label{unigrams}
+\end{figure}
 
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\columnwidth]{figures/bigrams.png}
+    \caption{10 most frequent combinations of two words}
+    \label{unigrams}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\columnwidth]{figures/unigrams.png}
+    \caption{10 most frequent combinations of three words}
+    \label{unigrams}
+\end{figure}
+
+Furthermore, several iterations of a naive Bayes classifier were trained on this data. The first one of which being  
+
+
+
+
+which yielded the following results:
+
+
+Moreover, the results obtained by the classifier that used the "naivebayes" package in R were the following:
+
+
+As we can see, the main differences were 
+
+
+
+After incorporating the case\_when() function, the results were
+
+
+Since the supposition that all children nodes have gaussian distributions seems little relevant considering that words are discrete objects, a Poisson distribution seems to be a more appropiate alternative, therefore a classifier was trained with this modification and showed 
+
+
+Given that there are many zeroes in the matrix, a smoothing technique like Laplace Smoothing was added to the classifier as well as cross-validation for feature selection and we got the following results:
 \section{Conclusions}
 The stories were 
 
